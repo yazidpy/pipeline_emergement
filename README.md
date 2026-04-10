@@ -1,6 +1,6 @@
 ## Système d’Émargement Intelligent — Golden Collar Institute
 
-Infrastructure (Phase 0) conforme au plan de travail du PDF.
+Infrastructure (Phase 0)
 
 ### Dossiers
 - `dags/`: DAGs Airflow (matin / après-midi)
