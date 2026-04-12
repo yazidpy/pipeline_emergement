@@ -1,6 +1,6 @@
 ## Système d’Émargement Intelligent — Golden Collar Institute
 
-Projet **Data Engineering** (pipeline Bronze / Silver / Gold, Airflow, Spark, Streamlit).  
+Projet **Data Engineering** (pipeline Bronze / Silver / Gold, Airflow, Spark, Streamlit), conforme au plan de travail du PDF.  
 **Phases réalisées : 0 (infrastructure + BDD) et 1 (génération Excel).**
 
 ### Dossiers
