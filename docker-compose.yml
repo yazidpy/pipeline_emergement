@@ -2,13 +2,16 @@ name: emargement-project
 
 services:
   postgres:
-    image: postgres:18
+    # 18+ impose un layout de données différent ; 16 reste stable pour /var/lib/postgresql/data
+    image: postgres:16
     container_name: emargement-postgres
     restart: unless-stopped
     env_file:
       - .env
+    # Port hôte par défaut 5433 : évite le conflit avec un PostgreSQL Windows sur 5432.
+    # À l'intérieur du réseau Docker, le service reste postgres:5432.
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PUBLISH_PORT:-5433}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./database:/docker-entrypoint-initdb.d:ro
@@ -34,18 +37,12 @@ services:
       - ./dags:/opt/airflow/dags
       - airflow_logs:/opt/airflow/logs
       - airflow_plugins:/opt/airflow/plugins
-    entrypoint: /bin/bash
-    command: >
-      -c "
-      airflow db migrate &&
-      airflow users create
-        --username admin
-        --firstname Admin
-        --lastname User
-        --role Admin
-        --email admin@example.com
-        --password admin
-      "
+    entrypoint:
+      - /bin/bash
+      - -c
+      - >
+        airflow db migrate &&
+        airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin
 
   airflow-webserver:
     image: apache/airflow:2.10.2
@@ -85,7 +82,8 @@ services:
     command: scheduler
 
   spark-master:
-    image: bitnami/spark:3.5
+    # bitnami/spark tags retirés du Hub (2025+) — image figée Bitnami Legacy
+    image: bitnamilegacy/spark:3.5
     container_name: emargement-spark-master
     restart: unless-stopped
     environment:
@@ -95,7 +93,7 @@ services:
       - "8081:8080"
 
   spark-worker:
-    image: bitnami/spark:3.5
+    image: bitnamilegacy/spark:3.5
     container_name: emargement-spark-worker
     restart: unless-stopped
     depends_on:
