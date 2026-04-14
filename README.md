@@ -1,12 +1,14 @@
+# Résumé
+
 ## Système d’Émargement Intelligent — Golden Collar Institute
 
 Projet **Data Engineering** (pipeline Bronze / Silver / Gold, Airflow, Spark, Streamlit), conforme au plan de travail du PDF.  
-**Phases réalisées : 0 (infrastructure + BDD) et 1 (génération Excel).**
+**Phases réalisées : 0 (infrastructure + BDD), 1 (génération Excel) et 2 (collecte / complétude).**
 
 ### Dossiers
 
 - `dags/` — DAGs Airflow (matin / après-midi) — *à venir*
-- `jobs/` — scripts pipeline : `generate.py` (Phase 1) ; collect, extract, transform, aggregate + `ia/` — *à venir*
+- `jobs/` — scripts pipeline : `generate.py`, `collect.py` ; extract, transform, aggregate + `ia/` — *à venir*
 - `database/` — `schema.sql` (schémas ref / bronze / silver / gold) et `seed_data.sql`
 - `dashboard/` — application Streamlit — *à venir*
 - `utils/` — connexion PostgreSQL (`db.py`), logging (`logger.py`)
@@ -53,11 +55,21 @@ python jobs/generate.py --session apres-midi --date 2026-04-06
 - `--session` : `matin` ou `apres-midi` (aligné sur `ref.cours.session`).
 - `--date` : optionnel, format `YYYY-MM-DD` ; par défaut : date du jour. Choisir un **jour ouvré** présent dans `seed_data.sql` / `ref.planning` (ex. lundi–vendredi), sinon aucun cours ne sera trouvé.
 
-**Sortie :** `data/generated/<YYYY-MM-DD>/<session>/`, un fichier `.xlsx` par cours (nom incluant `_cours<id>` pour les phases suivantes).
+**Sortie :** `data/generated/<YYYY-MM-DD>/<session>/`, un fichier `.xlsx` par cours (nom : intitulé + nom / prénom enseignant + `_cours<id>` — plus lisible que l’exemple du PDF).
+
+### Phase 2 — Collecte des feuilles retournées (`jobs/collect.py`)
+
+Pour une **même** date et session que la génération : compare `data/collected/<YYYY-MM-DD>/<session>/` aux feuilles **attendues** (même logique que la phase 1 : cours du jour avec inscrits, même nom de fichier). Détecte les manques, fichiers vides ou illisibles ; journalise avec enseignant et cours ; met à jour **`gold.retour_feuilles`** (taux de retour par enseignant). Le pipeline peut continuer avec les seuls fichiers valides.
+
+**Exemple :**
+
+```bash
+python jobs/collect.py --session matin
+python jobs/collect.py --session apres-midi --date 2026-04-06
+```
 
 ### Prochaines étapes
 
-- Phase 2 : `collect.py` (scan `data/collected/`, complétude, `gold.retour_feuilles`)
 - Phases 3–5 : extract / transform / aggregate (PySpark → bronze / silver / gold)
 - Phase 6 : dashboard Streamlit
 - Orchestration : DAGs Airflow dans `dags/`
