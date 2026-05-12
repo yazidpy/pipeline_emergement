@@ -1,8 +1,18 @@
 import os
+from pathlib import Path
 from typing import Any, Dict
 
 import psycopg2
 from psycopg2.extensions import connection as PgConnection
+
+# Charger le fichier .env s'il existe (utile quand lancé hors Docker/Airflow)
+ROOT = Path(__file__).resolve().parent.parent
+if (ROOT / ".env").exists():
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(ROOT / ".env")
+    except ImportError:
+        pass
 
 
 def get_postgres_dsn() -> str:

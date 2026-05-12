@@ -22,7 +22,7 @@ services:
       retries: 20
 
   airflow-init:
-    image: apache/airflow:2.10.2
+    build: .
     container_name: emargement-airflow-init
     depends_on:
       postgres:
@@ -33,8 +33,15 @@ services:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
       AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT: "60"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      SPARK_MASTER_URL: "local[*]"
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./jobs:/opt/airflow/jobs
+      - ./utils:/opt/airflow/utils
+      - ./data:/opt/airflow/data
+      - ./scripts:/opt/airflow/scripts
       - airflow_logs:/opt/airflow/logs
       - airflow_plugins:/opt/airflow/plugins
     entrypoint:
@@ -42,10 +49,11 @@ services:
       - -c
       - >
         airflow db migrate &&
-        airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin
+        airflow users create --username admin --firstname Admin --lastname User --role Admin --email admin@example.com --password admin &&
+        airflow connections add 'postgres_default' --conn-type 'postgres' --conn-host 'postgres' --conn-login 'emargement' --conn-password 'emargement' --conn-port '5432' --conn-schema 'emargement' || true
 
   airflow-webserver:
-    image: apache/airflow:2.10.2
+    build: .
     container_name: emargement-airflow-webserver
     restart: unless-stopped
     depends_on:
@@ -56,16 +64,22 @@ services:
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
       AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      SPARK_MASTER_URL: "local[*]"
     ports:
       - "8080:8080"
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./jobs:/opt/airflow/jobs
+      - ./utils:/opt/airflow/utils
+      - ./data:/opt/airflow/data
       - airflow_logs:/opt/airflow/logs
       - airflow_plugins:/opt/airflow/plugins
     command: webserver
 
   airflow-scheduler:
-    image: apache/airflow:2.10.2
+    build: .
     container_name: emargement-airflow-scheduler
     restart: unless-stopped
     depends_on:
@@ -75,8 +89,14 @@ services:
       - .env
     environment:
       AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      SPARK_MASTER_URL: "local[*]"
     volumes:
       - ./dags:/opt/airflow/dags
+      - ./jobs:/opt/airflow/jobs
+      - ./utils:/opt/airflow/utils
+      - ./data:/opt/airflow/data
       - airflow_logs:/opt/airflow/logs
       - airflow_plugins:/opt/airflow/plugins
     command: scheduler
@@ -102,7 +122,59 @@ services:
       - SPARK_MODE=worker
       - SPARK_MASTER_URL=spark://spark-master:7077
 
+  admin:
+    build: .
+    container_name: emargement-admin
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./app_admin.py:/opt/airflow/app_admin.py
+      - ./dashboard:/opt/airflow/dashboard
+      - ./utils:/opt/airflow/utils
+      - ./assets:/opt/airflow/assets
+      - ./data:/opt/airflow/data
+    entrypoint: ["/usr/bin/dumb-init", "--"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    command: ["streamlit", "run", "app_admin.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+
+  portal:
+    build: .
+    container_name: emargement-portal
+    restart: unless-stopped
+    depends_on:
+      airflow-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    env_file:
+      - .env
+    ports:
+      - "8502:8502"
+    volumes:
+      - ./app_prof.py:/opt/airflow/app_prof.py
+      - ./dashboard:/opt/airflow/dashboard
+      - ./jobs:/opt/airflow/jobs
+      - ./utils:/opt/airflow/utils
+      - ./assets:/opt/airflow/assets
+      - ./data:/opt/airflow/data
+    entrypoint: ["/usr/bin/dumb-init", "--"]
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    command: ["streamlit", "run", "app_prof.py", "--server.port", "8502", "--server.address", "0.0.0.0"]
+
 volumes:
   postgres_data:
   airflow_logs:
   airflow_plugins:
+ 

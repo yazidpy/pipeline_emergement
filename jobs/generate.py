@@ -16,6 +16,7 @@ from typing import List, Sequence, Tuple
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 # Racine projet (parent de jobs/)
 ROOT = Path(__file__).resolve().parent.parent
@@ -85,6 +86,7 @@ def fmt_heure(h) -> str:
 @dataclass(frozen=True)
 class CoursPlanifie:
     cours_id: int
+    enseignant_id: str
     intitule: str
     section: str
     horaire: str
@@ -93,6 +95,9 @@ class CoursPlanifie:
     heure_fin: object
     ens_nom: str
     ens_prenom: str
+    salle: str = "N/A"
+    formation_nom: str = "N/A"
+    niveau_nom: str = "N/A"
 
 
 @dataclass(frozen=True)
@@ -108,18 +113,23 @@ def fetch_cours_du_jour(session: str, jour: str) -> List[CoursPlanifie]:
     sql = """
         SELECT
             c.id,
+            c.enseignant_id,
             c.intitule,
-            c.section,
+            f.section,
             c.horaire,
-            c.session,
+            f.session AS session_form,
             p.heure_debut,
             p.heure_fin,
             e.nom AS ens_nom,
-            e.prenom AS ens_prenom
+            e.prenom AS ens_prenom,
+            p.salle,
+            f.intitule AS formation_nom,
+            f.niveau AS niveau_nom
         FROM ref.cours c
         INNER JOIN ref.planning p ON p.cours_id = c.id
-        INNER JOIN ref.enseignant e ON e.id = c.enseignant_id
-        WHERE p.jour_semaine = %s AND c.session = %s
+        INNER JOIN ref.enseignant e ON e.numero_ens = c.enseignant_id
+        INNER JOIN ref.formation f ON c.formation_id = f.id
+        WHERE LOWER(p.jour_semaine) = LOWER(%s) AND c.session = %s
         ORDER BY c.id
     """
     out: List[CoursPlanifie] = []
@@ -130,14 +140,18 @@ def fetch_cours_du_jour(session: str, jour: str) -> List[CoursPlanifie]:
                 out.append(
                     CoursPlanifie(
                         cours_id=row[0],
-                        intitule=row[1],
-                        section=row[2],
-                        horaire=row[3],
-                        session=row[4],
-                        heure_debut=row[5],
-                        heure_fin=row[6],
-                        ens_nom=row[7] or "",
-                        ens_prenom=row[8] or "",
+                        enseignant_id=row[1],
+                        intitule=row[2],
+                        section=row[3],
+                        horaire=row[4],
+                        session=row[5],
+                        heure_debut=row[6],
+                        heure_fin=row[7],
+                        ens_nom=row[8] or "",
+                        ens_prenom=row[9] or "",
+                        salle=row[10] or "Salle 101",
+                        formation_nom=row[11] or "N/A",
+                        niveau_nom=row[12] or "N/A"
                     )
                 )
     return out
@@ -145,10 +159,12 @@ def fetch_cours_du_jour(session: str, jour: str) -> List[CoursPlanifie]:
 
 def fetch_inscrits(cours_id: int) -> List[LigneEtudiant]:
     sql = """
-        SELECT e.numero_et, e.nom, e.prenom, e.filiere, e.niveau
-        FROM ref.inscription i
-        INNER JOIN ref.etudiant e ON e.numero_et = i.id_etudiant
-        WHERE i.cours_id = %s
+        SELECT e.numero_et, e.nom, e.prenom, f.intitule, f.niveau
+        FROM ref.cours c
+        JOIN ref.inscription i ON c.formation_id = i.id_formation
+        JOIN ref.etudiant e ON i.id_etudiant = e.numero_et
+        JOIN ref.formation f ON i.id_formation = f.id
+        WHERE c.id = %s
         ORDER BY e.nom, e.prenom
     """
     out: List[LigneEtudiant] = []
@@ -182,35 +198,53 @@ def build_workbook(
     ws = wb.active
     ws.title = "Émargement"
 
-    creneau = f"{fmt_heure(cours.heure_debut)}–{fmt_heure(cours.heure_fin)}"
+    creneau = f"{fmt_heure(cours.heure_debut)} – {fmt_heure(cours.heure_fin)}"
     enseignant = f"{cours.ens_prenom} {cours.ens_nom}".strip()
-    date_str = date_jour.isoformat()
+    date_str = date_jour.strftime("%d/%m/%Y")
 
-    ws.merge_cells("A1:H1")
-    ws["A1"] = f"Cours : {cours.intitule}"
-    ws["A1"].font = Font(bold=True, size=12)
-    ws["A1"].alignment = Alignment(horizontal="left", vertical="center")
+    # En-tête stylisé
+    ws.merge_cells("A1:E1")
+    ws["A1"] = f"FEUILLE D'ÉMARGEMENT : {cours.intitule}"
+    ws["A1"].font = Font(bold=True, size=14, color="1E3A5F")
+    ws["A1"].alignment = Alignment(horizontal="center", vertical="center")
 
-    ws.merge_cells("A2:H2")
-    ws["A2"] = (
-        f"Section : {cours.section}  |  Date : {date_str}  |  Session : {cours.session}"
-    )
-    ws["A3"] = f"Créneau : {creneau}  ({cours.horaire})  |  Enseignant : {enseignant}"
-    ws.merge_cells("A3:H3")
+    ws["A2"] = "Filière :"
+    ws["B2"] = cours.formation_nom
+    ws["D2"] = "Niveau :"
+    ws["E2"] = cours.niveau_nom
+    for cell in ["A2", "D2"]:
+        ws[cell].font = Font(bold=True)
 
-    header_row = 5
+    ws["A3"] = "Date :"
+    ws["B3"] = date_str
+    ws["D3"] = "Salle :"
+    ws["E3"] = cours.salle
+    for cell in ["A3", "D3"]:
+        ws[cell].font = Font(bold=True)
+
+    ws["A4"] = "Créneau :"
+    ws["B4"] = creneau
+    ws["D4"] = "Session :"
+    ws["E4"] = cours.session.capitalize()
+    for cell in ["A4", "D4"]:
+        ws[cell].font = Font(bold=True)
+
+    ws["A5"] = "Enseignant :"
+    ws.merge_cells("B5:E5")
+    ws["B5"] = enseignant
+    ws["A5"].font = Font(bold=True)
+
+    # Ligne d'en-tête du tableau
+    header_row = 7
     headers = (
-        "Numero_et",
+        "Numéro Ét.",
         "Nom",
         "Prénom",
-        "Filière",
-        "Niveau",
         "Présent (O/N)",
-        "Signature",
         "Remarque",
     )
-    fill_header = PatternFill(start_color="FF4472C4", end_color="FF4472C4", fill_type="solid")
-    font_header = Font(bold=True, color="FFFFFFFF")
+    fill_header = PatternFill(start_color="1E3A5F", end_color="1E3A5F", fill_type="solid")
+    font_header = Font(bold=True, color="FFFFFF")
     border = _style_bordure_fine()
 
     for col, h in enumerate(headers, start=1):
@@ -218,8 +252,15 @@ def build_workbook(
         cell.fill = fill_header
         cell.font = font_header
         cell.border = border
-        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+        cell.alignment = Alignment(horizontal="center", vertical="center")
 
+    # Validation de données O/N
+    dv = DataValidation(type="list", formula1='"O,N"', allow_blank=True)
+    dv.error = 'Veuillez choisir O (Oui) ou N (Non)'
+    dv.errorTitle = 'Entrée invalide'
+    ws.add_data_validation(dv)
+
+    # Remplissage des données
     data_start = header_row + 1
     for i, etu in enumerate(lignes):
         r = data_start + i
@@ -227,22 +268,24 @@ def build_workbook(
             etu.numero_et,
             etu.nom,
             etu.prenom,
-            etu.filiere,
-            etu.niveau,
-            "",
-            "",
-            "",
+            "",  # Présent (vide par défaut)
+            "",  # Remarque
         )
-        for col, val in enumerate(values, start=1):
-            c = ws.cell(row=r, column=col, value=val)
+        for col_idx, val in enumerate(values, start=1):
+            c = ws.cell(row=r, column=col_idx, value=val)
             c.border = border
-            c.alignment = Alignment(vertical="center", wrap_text=True)
+            c.alignment = Alignment(vertical="center")
+            
+            # Appliquer validation sur la colonne D (Présent)
+            if col_idx == 4:
+                dv.add(c)
 
-    widths = (14, 18, 14, 16, 10, 10, 22, 28)
+    # Ajustement largeurs colonnes
+    widths = (15, 25, 20, 15, 30)
     for i, w in enumerate(widths, start=1):
         ws.column_dimensions[get_column_letter(i)].width = w
 
-    ws.row_dimensions[1].height = 22
+    ws.row_dimensions[1].height = 30
     return wb
 
 

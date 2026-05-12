@@ -1,75 +1,62 @@
-# Résumé
+# Système d'Émargement Intelligent - SmartAcademy
 
-## Système d’Émargement Intelligent — Golden Collar Institute
+Solution complète de gestion d'émargement, d'assiduité et de scoring pour les instituts de formation. 
 
-Projet **Data Engineering** (pipeline Bronze / Silver / Gold, Airflow, Spark, Streamlit), conforme au plan de travail du PDF.  
-**Phases réalisées : 0 (infrastructure + BDD), 1 (génération Excel) et 2 (collecte / complétude).**
+---
 
-### Dossiers
+## 🚀 Fonctionnalités Clés
+- **Portail Enseignant** : Génération et dépôt sécurisé de feuilles d'émargement Excel.
+- **Dashboard Admin** : Analyse Power BI (KPIs, Taux de présence, Alertes absences).
+- **Scoring Automatique** : Calcul du sérieux et attribution de badges (Or, Argent, Bronze).
+- **Architecture Medallion** : Pipeline de données Robuste (Bronze → Silver → Gold) via Spark & Airflow.
+- **Sécurité** : Authentification centralisée pour tous les utilisateurs.
 
-- `dags/` — DAGs Airflow (matin / après-midi) — *à venir*
-- `jobs/` — scripts pipeline : `generate.py`, `collect.py` ; extract, transform, aggregate + `ia/` — *à venir*
-- `database/` — `schema.sql` (schémas ref / bronze / silver / gold) et `seed_data.sql`
-- `dashboard/` — application Streamlit — *à venir*
-- `utils/` — connexion PostgreSQL (`db.py`), logging (`logger.py`)
-- `data/` — Excel générés (`generated/`) et collectés (`collected/`) — ignoré par Git
-- `models/` — modèles ML sérialisés (bonus)
+---
 
-### Prérequis
+## 🛠️ Architecture Techniques
+- **Backend** : Python 3.11, Apache Spark 3.5
+- **Orchestration** : Apache Airflow
+- **Base de Données** : PostgreSQL 16
+- **Interfaces** : Streamlit (Dashboards SaaS)
+- **Infrastructure** : Docker Multi-conteneurs
 
-- Docker + Docker Compose
-- Python 3.10+ (pour lancer les scripts en local)
+---
 
-### Phase 0 — Environnement
-
-1. Copier `.env.example` vers `.env` et renseigner les identifiants PostgreSQL.
-2. **Depuis ta machine (PowerShell / terminal)** : pour `generate.py`, utilise `POSTGRES_HOST=127.0.0.1` et le **port publié** (souvent `5433`, voir `POSTGRES_PUBLISH_PORT` dans le compose). Le hostname `postgres` ne fonctionne que **depuis les conteneurs** ; laisse `AIRFLOW__DATABASE__SQL_ALCHEMY_CONN` avec `@postgres:5432` pour Airflow.
-3. Démarrer les services :
-
-```bash
-docker compose up -d
+## 📂 Structure du Projet
+```text
+├── app_admin.py        # Dashboard Admin (Modulaire)
+├── app_prof.py         # Portail Enseignant (Sécurisé)
+├── dashboard/          # Composants UI, Charts et Views
+├── dags/               # Pipelines Airflow (Ingestion & Scoring)
+├── jobs/               # Traitements Spark (ETL)
+├── docs/               # Documentation Utilisateur & Schéma BDD
+├── database/           # Scripts d'initialisation SQL
+└── utils/              # Sécurité (Auth), DB et PDF
 ```
 
-- Airflow : `http://localhost:8080` (login par défaut souvent `admin` / `admin` après init)
-- Spark master UI : `http://localhost:8081`
+---
 
-PostgreSQL charge automatiquement `database/schema.sql` puis `database/seed_data.sql` au premier démarrage du volume.
+## ⚙️ Installation & Lancement
 
-### Phase 1 — Génération des feuilles Excel (`jobs/generate.py`)
+1.  **Prérequis** : Docker & Docker Compose installés.
+2.  **Configuration** : Copiez `.env.example` en `.env` et ajustez les variables.
+3.  **Lancement** :
+    ```bash
+    docker compose up -d --build
+    ```
+4.  **Accès** :
+    - **Admin** : `http://localhost:8501` (admin/admin ou yazid/Golden2024!)
+    - **Portail Prof** : `http://localhost:8502`
+    - **Airflow** : `http://localhost:8080` (admin/admin)
 
-Génère une feuille **par cours** du jour, avec les inscrits issus de `ref.*`, au format openpyxl.
+---
 
-**Installation des dépendances Python (hôte) :**
+## 📖 Documentation Complète
+Pour plus de détails, consultez les guides dans le dossier `/docs` :
+- [Guide Administration](docs/guide_admin.md)
+- [Guide Enseignants](docs/guide_prof.md)
+- [Schéma Base de Données](docs/database_schema.md)
 
-```bash
-pip install -r requirements.txt
-```
+---
 
-**Exemple d’exécution :**
-
-```bash
-python jobs/generate.py --session matin
-python jobs/generate.py --session apres-midi --date 2026-04-06
-```
-
-- `--session` : `matin` ou `apres-midi` (aligné sur `ref.cours.session`).
-- `--date` : optionnel, format `YYYY-MM-DD` ; par défaut : date du jour. Choisir un **jour ouvré** présent dans `seed_data.sql` / `ref.planning` (ex. lundi–vendredi), sinon aucun cours ne sera trouvé.
-
-**Sortie :** `data/generated/<YYYY-MM-DD>/<session>/`, un fichier `.xlsx` par cours (nom : intitulé + nom / prénom enseignant + `_cours<id>` — plus lisible que l’exemple du PDF).
-
-### Phase 2 — Collecte des feuilles retournées (`jobs/collect.py`)
-
-Pour une **même** date et session que la génération : compare `data/collected/<YYYY-MM-DD>/<session>/` aux feuilles **attendues** (même logique que la phase 1 : cours du jour avec inscrits, même nom de fichier). Détecte les manques, fichiers vides ou illisibles ; journalise avec enseignant et cours ; met à jour **`gold.retour_feuilles`** (taux de retour par enseignant). Le pipeline peut continuer avec les seuls fichiers valides.
-
-**Exemple :**
-
-```bash
-python jobs/collect.py --session matin
-python jobs/collect.py --session apres-midi --date 2026-04-06
-```
-
-### Prochaines étapes
-
-- Phases 3–5 : extract / transform / aggregate (PySpark → bronze / silver / gold)
-- Phase 6 : dashboard Streamlit
-- Orchestration : DAGs Airflow dans `dags/`
+*Contact Support : IT Department - SmartAcademy Institute*
